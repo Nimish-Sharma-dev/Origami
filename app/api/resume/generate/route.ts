@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { generateResumeLatex, scoreResumeATS } from '@/lib/ai/deepseek'
 import { compileLaTeX } from '@/lib/latex/compiler'
 import type { ResumeTemplate } from '@/types'
@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing user_id' }, { status: 400 })
     }
 
-    const supabase = createServiceClient()
+    const supabase = createAdminClient()
 
     // Fetch all user data in parallel
     const [
@@ -113,7 +113,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Missing user_id' }, { status: 400 })
   }
 
-  const supabase = createServiceClient()
+  const supabase = createAdminClient()
   const { data: resumes, error } = await supabase
     .from('resumes')
     .select('*')

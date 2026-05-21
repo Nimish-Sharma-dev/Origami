@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import {
@@ -34,12 +34,14 @@ export default function ResumePage() {
   const [customInstructions, setCustomInstructions] = useState('')
   const [step, setStep] = useState<GenStep>('idle')
   const [latexContent, setLatexContent] = useState('')
+  const [streamingContent, setStreamingContent] = useState('')
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [atsScore, setAtsScore] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [pastResumes, setPastResumes] = useState<{ id: string; template: string; ats_score: number; created_at: string }[]>([])
+  const streamRef = useRef<HTMLPreElement>(null)
   const supabase = createClient()
 
   useEffect(() => {
@@ -58,20 +60,29 @@ export default function ResumePage() {
     load()
   }, [])
 
+  // Auto-scroll streaming content
+  useEffect(() => {
+    if (streamRef.current && streamingContent) {
+      streamRef.current.scrollTop = streamRef.current.scrollHeight
+    }
+  }, [streamingContent])
+
   const generate = async () => {
     if (!userId) return
     setStep('collecting')
     setError(null)
     setLatexContent('')
+    setStreamingContent('')
     setPdfUrl(null)
     setAtsScore(null)
 
     try {
       setStep('analyzing')
-      await new Promise(r => setTimeout(r, 600))
+      await new Promise(r => setTimeout(r, 400))
       setStep('writing')
 
-      const res = await fetch('/api/resume/generate', {
+      // Use the streaming endpoint
+      const res = await fetch('/api/resume/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -86,25 +97,73 @@ export default function ResumePage() {
         throw new Error(err.error || 'Generation failed')
       }
 
-      setStep('compiling')
-      const data = await res.json()
+      // Read SSE stream
+      const reader = res.body?.getReader()
+      if (!reader) throw new Error('No response stream')
 
-      setStep('scoring')
-      await new Promise(r => setTimeout(r, 400))
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let accumulatedContent = ''
 
-      setLatexContent(data.latex_content)
-      setPdfUrl(data.pdf_url)
-      setAtsScore(data.ats_score?.overall ?? null)
-      setStep('done')
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
 
-      // Reload past resumes
-      const { data: updated } = await supabase
-        .from('resumes')
-        .select('id, template, ats_score, created_at')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(5)
-      setPastResumes(updated || [])
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        let currentEvent = ''
+
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (trimmed.startsWith('event: ')) {
+            currentEvent = trimmed.slice(7)
+          } else if (trimmed.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(trimmed.slice(6))
+
+              switch (currentEvent) {
+                case 'chunk':
+                  accumulatedContent += data.content
+                  setStreamingContent(accumulatedContent)
+                  break
+                case 'status':
+                  if (data.step === 'scoring') setStep('scoring')
+                  else if (data.step === 'compiling') setStep('compiling')
+                  break
+                case 'complete':
+                  setLatexContent(data.latex_content)
+                  setPdfUrl(data.pdf_url)
+                  setAtsScore(data.ats_score?.overall ?? null)
+                  setStep('done')
+                  // Reload past resumes
+                  const { data: updated } = await supabase
+                    .from('resumes')
+                    .select('id, template, ats_score, created_at')
+                    .eq('user_id', userId)
+                    .order('created_at', { ascending: false })
+                    .limit(5)
+                  setPastResumes(updated || [])
+                  break
+                case 'error':
+                  throw new Error(data.message)
+              }
+            } catch (e) {
+              if (e instanceof Error && e.message !== 'Unexpected end of JSON input') {
+                throw e
+              }
+            }
+          }
+        }
+      }
+
+      // If we never got a 'complete' event but stream ended, set done
+      if (step !== 'done' && step !== 'error' && accumulatedContent) {
+        setLatexContent(accumulatedContent)
+        setStep('done')
+      }
+
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       setError(message)
@@ -113,13 +172,14 @@ export default function ResumePage() {
   }
 
   const copyLatex = () => {
-    navigator.clipboard.writeText(latexContent)
+    navigator.clipboard.writeText(latexContent || streamingContent)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
   const downloadLatex = () => {
-    const blob = new Blob([latexContent], { type: 'text/plain' })
+    const content = latexContent || streamingContent
+    const blob = new Blob([content], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -128,6 +188,7 @@ export default function ResumePage() {
   }
 
   const isGenerating = ['collecting', 'analyzing', 'writing', 'compiling', 'scoring'].includes(step)
+  const displayContent = latexContent || streamingContent
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -277,7 +338,7 @@ export default function ResumePage() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-bold text-gray-900">ATS Score</h3>
-                  <p className="text-sm text-gray-400">Your resume's recruitability score</p>
+                  <p className="text-sm text-gray-400">Your resume&apos;s recruitability score</p>
                 </div>
                 <div className="text-right">
                   <div className={`text-4xl font-black ${atsScore >= 80 ? 'text-emerald-600' : atsScore >= 60 ? 'text-amber-600' : 'text-red-500'}`}>
@@ -302,27 +363,39 @@ export default function ResumePage() {
             </motion.div>
           )}
 
-          {/* LaTeX preview */}
-          {latexContent && (
+          {/* Streaming / LaTeX preview */}
+          {(displayContent || (step === 'writing' && streamingContent === '')) && step !== 'idle' && step !== 'error' && (
             <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="glow-card overflow-hidden">
               <div className="flex items-center justify-between p-4 border-b border-emerald-50">
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-emerald-600" />
-                  <span className="font-semibold text-gray-900 text-sm">LaTeX Source</span>
+                  <span className="font-semibold text-gray-900 text-sm">
+                    {step === 'writing' ? 'Generating LaTeX...' : 'LaTeX Source'}
+                  </span>
+                  {step === 'writing' && (
+                    <span className="inline-block w-2 h-4 bg-emerald-500 animate-pulse rounded-sm ml-1" />
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={copyLatex} className="flex items-center gap-1 text-xs text-gray-500 hover:text-emerald-600 transition-colors px-2 py-1 rounded-lg hover:bg-emerald-50">
-                    {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    {copied ? 'Copied!' : 'Copy'}
-                  </button>
-                  <button onClick={downloadLatex} className="flex items-center gap-1 text-xs text-gray-500 hover:text-emerald-600 transition-colors px-2 py-1 rounded-lg hover:bg-emerald-50">
-                    <Download className="w-3.5 h-3.5" />
-                    .tex
-                  </button>
+                  {displayContent && (
+                    <>
+                      <button onClick={copyLatex} className="flex items-center gap-1 text-xs text-gray-500 hover:text-emerald-600 transition-colors px-2 py-1 rounded-lg hover:bg-emerald-50">
+                        {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copied ? 'Copied!' : 'Copy'}
+                      </button>
+                      <button onClick={downloadLatex} className="flex items-center gap-1 text-xs text-gray-500 hover:text-emerald-600 transition-colors px-2 py-1 rounded-lg hover:bg-emerald-50">
+                        <Download className="w-3.5 h-3.5" />
+                        .tex
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
               <div className="terminal text-xs text-gray-600 h-64 overflow-y-auto rounded-none scrollbar-hide">
-                <pre className="whitespace-pre-wrap break-words">{latexContent}</pre>
+                <pre ref={streamRef} className="whitespace-pre-wrap break-words">
+                  {displayContent}
+                  {step === 'writing' && <span className="inline-block w-1.5 h-3.5 bg-emerald-500 animate-pulse ml-0.5 align-text-bottom" />}
+                </pre>
               </div>
             </motion.div>
           )}
@@ -369,7 +442,7 @@ export default function ResumePage() {
               </div>
               <h3 className="font-bold text-gray-900 mb-2">Your resume will appear here</h3>
               <p className="text-sm text-gray-400 max-w-xs">
-                Select a template, add optional instructions, then click Generate. DeepSeek V3 will craft your resume from your GitHub data.
+                Select a template, add optional instructions, then click Generate. DeepSeek V3 will craft your resume from your GitHub data — you&apos;ll see it stream in word-by-word.
               </p>
             </div>
           )}

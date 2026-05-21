@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import BlurText from '@/components/bits/BlurText'
 import Dock from '@/components/bits/Dock'
+import BounceCards from '@/components/bits/BounceCards'
 
 const features = [
   {
@@ -249,6 +250,29 @@ export default function LandingPage() {
           >
             Free to start • No credit card required • Built for students & developers
           </motion.p>
+
+          {/* Interactive Resume Previews with BounceCards */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 1.2, duration: 0.6 }}
+            className="mt-14 flex justify-center"
+          >
+            <BounceCards
+              images={[
+                '/images/resume_faang.png',
+                '/images/resume_modern.png',
+                '/images/resume_ai.png',
+              ]}
+              containerWidth={500}
+              containerHeight={320}
+              transformStyles={[
+                'rotate(-8deg) translate(-140px, 15px)',
+                'rotate(0deg) translate(0px, -15px)',
+                'rotate(8deg) translate(140px, 15px)',
+              ]}
+            />
+          </motion.div>
         </div>
 
         {/* Stats bar */}

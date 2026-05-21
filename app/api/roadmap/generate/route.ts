@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { generateRoadmap } from '@/lib/ai/deepseek'
 
 export async function POST(req: NextRequest) {
@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing user_id' }, { status: 400 })
     }
 
-    const supabase = createServiceClient()
+    const supabase = createAdminClient()
 
     const { data: skills } = await supabase
       .from('skills')
@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Missing user_id' }, { status: 400 })
   }
 
-  const supabase = createServiceClient()
+  const supabase = createAdminClient()
   const { data: nodes } = await supabase
     .from('roadmap_nodes')
     .select('*')

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import {
   getPublicRepos,
   getRepoLanguages,
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing user_id or github_username' }, { status: 400 })
     }
 
-    const supabase = createServiceClient()
+    const supabase = createAdminClient()
 
     // Verify user exists
     const { data: user, error: userError } = await supabase

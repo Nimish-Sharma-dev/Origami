@@ -104,7 +104,7 @@ export default function BounceCards({
       {images.map((src, idx) => (
         <div
           key={idx}
-          className={`bounce-card bounce-card-${idx} absolute w-44 aspect-square border-4 border-white rounded-2xl overflow-hidden shadow-xl`}
+          className={`bounce-card bounce-card-${idx} absolute w-40 aspect-[3/4] border-4 border-white rounded-xl overflow-hidden shadow-2xl bg-white`}
           style={{ transform: transformStyles[idx] ?? 'none' }}
           onMouseEnter={() => pushSiblings(idx)}
           onMouseLeave={resetSiblings}

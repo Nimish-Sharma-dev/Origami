@@ -12,6 +12,20 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error && data.user) {
+      const isGitHub = data.user.app_metadata?.provider === 'github'
+      const githubUsername = isGitHub
+        ? (data.user.user_metadata?.user_name || data.user.user_metadata?.preferred_username || null)
+        : null
+
+      // Check existing connection from database
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('github_connected, github_username')
+        .eq('id', data.user.id)
+        .single()
+
+      const hasGitHub = isGitHub || !!existingUser?.github_connected || !!existingUser?.github_username
+
       // Upsert user profile
       await supabase.from('users').upsert(
         {
@@ -21,15 +35,18 @@ export async function GET(request: NextRequest) {
           avatar_url:
             data.user.user_metadata?.avatar_url ||
             data.user.user_metadata?.picture || null,
-          github_username:
-            data.user.user_metadata?.user_name ||
-            data.user.user_metadata?.preferred_username || null,
-          github_connected: data.user.app_metadata?.provider === 'github',
+          github_username: githubUsername || existingUser?.github_username || null,
+          github_connected: hasGitHub,
         },
         { onConflict: 'id', ignoreDuplicates: false }
       )
 
-      return NextResponse.redirect(`${origin}${next}`)
+      let redirectUrl = next
+      if (!hasGitHub) {
+        redirectUrl = '/github-connect'
+      }
+
+      return NextResponse.redirect(`${origin}${redirectUrl}`)
     }
   }
 
