@@ -22,7 +22,7 @@ export async function getPublicRepos(username: string, token?: string): Promise<
 
   const res = await fetch(
     `${GITHUB_API}/users/${username}/repos?per_page=100&sort=pushed&type=public`,
-    { headers }
+    { headers, cache: 'no-store' }
   )
   if (!res.ok) throw new Error('Failed to fetch repositories')
   return res.json()
@@ -39,7 +39,7 @@ export async function getRepoLanguages(
   const authToken = token || process.env.GITHUB_TOKEN
   if (authToken) headers.Authorization = `Bearer ${authToken}`
 
-  const res = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/languages`, { headers })
+  const res = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/languages`, { headers, cache: 'no-store' })
   if (!res.ok) return {}
   return res.json()
 }
@@ -56,7 +56,7 @@ export async function getReadme(
   if (authToken) headers.Authorization = `Bearer ${authToken}`
 
   try {
-    const res = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/readme`, { headers })
+    const res = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/readme`, { headers, cache: 'no-store' })
     if (!res.ok) return null
     const data = await res.json()
     return Buffer.from(data.content, 'base64').toString('utf-8')
