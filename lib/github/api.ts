@@ -17,7 +17,8 @@ export async function getPublicRepos(username: string, token?: string): Promise<
   const headers: Record<string, string> = {
     Accept: 'application/vnd.github+json',
   }
-  if (token) headers.Authorization = `Bearer ${token}`
+  const authToken = token || process.env.GITHUB_TOKEN
+  if (authToken) headers.Authorization = `Bearer ${authToken}`
 
   const res = await fetch(
     `${GITHUB_API}/users/${username}/repos?per_page=100&sort=pushed&type=public`,
@@ -35,7 +36,8 @@ export async function getRepoLanguages(
   const headers: Record<string, string> = {
     Accept: 'application/vnd.github+json',
   }
-  if (token) headers.Authorization = `Bearer ${token}`
+  const authToken = token || process.env.GITHUB_TOKEN
+  if (authToken) headers.Authorization = `Bearer ${authToken}`
 
   const res = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/languages`, { headers })
   if (!res.ok) return {}
@@ -50,7 +52,8 @@ export async function getReadme(
   const headers: Record<string, string> = {
     Accept: 'application/vnd.github+json',
   }
-  if (token) headers.Authorization = `Bearer ${token}`
+  const authToken = token || process.env.GITHUB_TOKEN
+  if (authToken) headers.Authorization = `Bearer ${authToken}`
 
   try {
     const res = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/readme`, { headers })
